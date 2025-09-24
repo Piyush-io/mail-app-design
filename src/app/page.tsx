@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -101,6 +101,73 @@ function MailCard({
   const delOpacity = useTransform(x, [-100, -40], [1, 0]);
   const impOpacity = useTransform(x, [40, 100], [0, 1]);
 
+  // haptics + trackpad support
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const firedRef = useRef({ left: false, right: false });
+  const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const haptic = (pattern: number | number[] = 30) => {
+    try {
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        // @ts-expect-error: vibrate exists on Navigator in most browsers
+        navigator.vibrate(pattern);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const unsubscribe = x.on("change", (val) => {
+      if (val < -120 && !firedRef.current.left) {
+        firedRef.current.left = true;
+        haptic([8, 20, 8]);
+      } else if (val > -120 && firedRef.current.left) {
+        firedRef.current.left = false;
+      }
+      if (val > 120 && !firedRef.current.right) {
+        firedRef.current.right = true;
+        haptic([8, 20, 8]);
+      } else if (val < 120 && firedRef.current.right) {
+        firedRef.current.right = false;
+      }
+    });
+    return unsubscribe;
+  }, [x]);
+
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      // react to primarily horizontal trackpad scrolls
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+
+      const next = x.get() + e.deltaX * 0.6; // dampen for finer control
+      const clamped = Math.max(-160, Math.min(160, next));
+      x.set(clamped);
+
+      if (settleRef.current) clearTimeout(settleRef.current);
+      settleRef.current = setTimeout(() => {
+        const current = x.get();
+        if (current <= -120) {
+          haptic(40);
+          onDelete(mail.id);
+        } else if (current >= 120) {
+          haptic(40);
+          onToggleImportant?.(mail.id);
+        } else {
+          x.set(0);
+        }
+      }, 160);
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel as any);
+      if (settleRef.current) clearTimeout(settleRef.current);
+    };
+  }, [x, mail.id, onDelete, onToggleImportant]);
+
   return (
     <div className="relative">
       <motion.div
@@ -123,6 +190,7 @@ function MailCard({
       </motion.div>
 
       <motion.button
+        ref={btnRef}
         layoutId={`card-${mail.id}`}
         onClick={() => onOpen(mail)}
         drag="x"
@@ -130,8 +198,10 @@ function MailCard({
         dragConstraints={{ left: -160, right: 160 }}
         onDragEnd={(_, info) => {
           if (info.offset.x < -120) {
+            haptic(40);
             onDelete(mail.id);
           } else if (info.offset.x > 120) {
+            haptic(40);
             onToggleImportant?.(mail.id);
           } else {
             x.set(0);
