@@ -98,8 +98,8 @@ function MailCard({
     [-160, 0, 160],
     ["0 24px 40px -16px rgba(0,0,0,.25)", "0 18px 28px -12px rgba(0,0,0,.2)", "0 24px 40px -16px rgba(0,0,0,.25)"]
   );
-  const delOpacity = useTransform(x, [-100, -40], [1, 0]);
-  const impOpacity = useTransform(x, [40, 100], [0, 1]);
+  const delOpacity = useTransform(x, [40, 100], [0, 1]);
+  const impOpacity = useTransform(x, [-100, -40], [1, 0]);
 
   // haptics + trackpad support
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -149,10 +149,12 @@ function MailCard({
       if (settleRef.current) clearTimeout(settleRef.current);
       settleRef.current = setTimeout(() => {
         const current = x.get();
-        if (current <= -120) {
+        if (current >= 120) {
+          // right = delete
           haptic(40);
           onDelete(mail.id);
-        } else if (current >= 120) {
+        } else if (current <= -120) {
+          // left = mark important
           haptic(40);
           onToggleImportant?.(mail.id);
         } else {
@@ -172,7 +174,7 @@ function MailCard({
     <div className="relative">
       <motion.div
         style={{ opacity: delOpacity }}
-        className="absolute -left-16 top-1/2 -translate-y-1/2 select-none"
+        className="absolute right-16 top-1/2 -translate-y-1/2 select-none"
       >
         <div className="inline-flex items-center gap-1.5 text-xs text-destructive/80 bg-destructive/10 px-2 py-1 rounded-full">
           <Trash2 className="h-3.5 w-3.5" />
@@ -181,7 +183,7 @@ function MailCard({
       </motion.div>
       <motion.div
         style={{ opacity: impOpacity }}
-        className="absolute right-16 top-1/2 -translate-y-1/2 select-none flex flex-row-reverse"
+        className="absolute -left-16 top-1/2 -translate-y-1/2 select-none"
       >
         <div className="inline-flex items-center gap-1.5 text-xs text-amber-600 bg-amber-100 px-2 py-1 rounded-full">
           <Star className="h-3.5 w-3.5 fill-current" />
@@ -197,10 +199,12 @@ function MailCard({
         dragElastic={0.12}
         dragConstraints={{ left: -160, right: 160 }}
         onDragEnd={(_, info) => {
-          if (info.offset.x < -120) {
+          if (info.offset.x > 120) {
+            // right = delete
             haptic(40);
             onDelete(mail.id);
-          } else if (info.offset.x > 120) {
+          } else if (info.offset.x < -120) {
+            // left = mark important
             haptic(40);
             onToggleImportant?.(mail.id);
           } else {
@@ -312,23 +316,30 @@ export default function Page() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 14 }}
               transition={{ type: "spring", stiffness: 300, damping: 28 }}
-              className="space-y-6"
+              className="relative"
             >
               {mails.map((m, i) => (
-                <MailCard
+                <div
                   key={m.id}
-                  mail={m}
-                  index={i}
-                  onOpen={openWithEnvelope}
-                  onDelete={(id) => setMails((prev) => prev.filter((x) => x.id !== id))}
-                  onToggleImportant={(id) =>
-                    setMails((prev) =>
-                      prev.map((m) =>
-                        m.id === id ? { ...m, important: !m.important } : m
+                  style={{
+                    marginTop: i === 0 ? 0 : -48,
+                    zIndex: mails.length - i,
+                  }}
+                >
+                  <MailCard
+                    mail={m}
+                    index={i}
+                    onOpen={openWithEnvelope}
+                    onDelete={(id) => setMails((prev) => prev.filter((x) => x.id !== id))}
+                    onToggleImportant={(id) =>
+                      setMails((prev) =>
+                        prev.map((m) =>
+                          m.id === id ? { ...m, important: !m.important } : m
+                        )
                       )
-                    )
-                  }
-                />
+                    }
+                  />
+                </div>
               ))}
 
               <motion.button
@@ -448,7 +459,12 @@ export default function Page() {
                   <div className="flex justify-end">
                     <Button size="sm" className="border-0 focus-visible:ring-0 bg-foreground text-background hover:bg-foreground/90 shadow-md rounded-full px-4" onClick={() => {
                       // TODO: send reply logic
-                      setOpenMail(null);
+                      setEnvelopeMode("close");
+                      setShowEnvelope(true);
+                      setTimeout(() => {
+                        setShowEnvelope(false);
+                        setOpenMail(null);
+                      }, 900);
                     }}>Send</Button>
                   </div>
                 </div>
@@ -473,7 +489,19 @@ export default function Page() {
                 >
                   Back
                 </Button>
-                <Button size="sm" variant="destructive" className="border-0 focus-visible:ring-0 bg-destructive text-white hover:bg-destructive/90 shadow-md rounded-full px-4" onClick={() => { setMails((prev) => prev.filter((x) => x.id !== openMail.id)); setOpenMail(null); }}>Delete</Button>
+                <Button size="sm" variant="destructive" className="border-0 focus-visible:ring-0 bg-destructive text-white hover:bg-destructive/90 shadow-md rounded-full px-4" onClick={() => {
+                  // collapse back into stack before deleting
+                  const toDelete = openMail?.id;
+                  setEnvelopeMode("close");
+                  setShowEnvelope(true);
+                  setTimeout(() => {
+                    setShowEnvelope(false);
+                    setOpenMail(null);
+                    if (toDelete != null) {
+                      setMails((prev) => prev.filter((x) => x.id !== toDelete));
+                    }
+                  }, 900);
+                }}>Delete</Button>
               </div>
             </motion.div>
           )}
