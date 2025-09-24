@@ -245,6 +245,10 @@ export default function Page() {
   const [mails, setMails] = useState<Mail[]>(initialMails);
   const [openMail, setOpenMail] = useState<Mail | null>(null);
   const [isComposing, setIsComposing] = useState(false);
+  // envelope animation state
+  const [showEnvelope, setShowEnvelope] = useState(false);
+  const [envelopeMode, setEnvelopeMode] = useState<"open" | "close">("open");
+  const pendingMailRef = useRef<Mail | null>(null);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -253,8 +257,36 @@ export default function Page() {
     return "good evening";
   }, []);
 
+  // orchestrate envelope -> letter reveal
+  const openWithEnvelope = (mail: Mail) => {
+    pendingMailRef.current = mail;
+    setEnvelopeMode("open");
+    setShowEnvelope(true);
+    // reveal detail after animation
+    setTimeout(() => {
+      setOpenMail(mail);
+      setShowEnvelope(false);
+    }, 900);
+  };
+
   return (
     <div className="min-h-screen w-full flex items-start justify-center bg-gradient-to-b from-stone-100 to-[#d9d7cf]">
+      {/* envelope overlay */}
+      <AnimatePresence>
+        {showEnvelope && (
+          <motion.div
+            key="envelope-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 grid place-items-center bg-black/20 backdrop-blur-[1.5px]"
+          >
+            <EnvelopeAnimation mode={envelopeMode} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <main className="w-full max-w-[480px] mx-auto px-5 pt-7 pb-28 antialiased">
         {/* header */}
         <div className="flex items-center justify-between mb-7">
@@ -287,7 +319,7 @@ export default function Page() {
                   key={m.id}
                   mail={m}
                   index={i}
-                  onOpen={setOpenMail}
+                  onOpen={openWithEnvelope}
                   onDelete={(id) => setMails((prev) => prev.filter((x) => x.id !== id))}
                   onToggleImportant={(id) =>
                     setMails((prev) =>
@@ -378,15 +410,32 @@ export default function Page() {
                   <Stamp url={openMail.stamp} />
                 </div>
 
-                <div className="prose prose-sm max-w-none">
-                  {openMail.body.map((p, idx) => (
-                    <p key={idx} className="text-[15px] leading-relaxed my-2">{p}</p>
-                  ))}
-                  {/* signature block */}
-                  <div className="h-20 my-4">
-                    <svg viewBox="0 0 200 80" className="h-full w-auto">
-                      <path d="M10 50 C 40 10, 80 90, 120 40 S 180 30, 190 60" stroke="currentColor" strokeWidth="3" fill="none" />
-                    </svg>
+                {/* letter paper look */}
+                <div
+                  className="rounded-xl p-4 shadow-inner ring-1 ring-black/5 bg-[#fffdfa]"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(transparent 23px, rgba(0,0,0,0.04) 24px)",
+                    backgroundSize: "100% 24px",
+                    transform: "rotate(-0.15deg)",
+                  }}
+                >
+                  <div className="handwritten text-[18px] leading-8 text-[#243b6b]/95">
+                    {openMail.body.map((p, idx) => (
+                      <p
+                        key={idx}
+                        className="my-[6px]"
+                        style={{ textIndent: idx === 0 ? 0 : "1.25rem" }}
+                      >
+                        {p}
+                      </p>
+                    ))}
+                    {/* signature block */}
+                    <div className="h-20 my-4">
+                      <svg viewBox="0 0 200 80" className="h-full w-auto">
+                        <path d="M10 50 C 40 10, 80 90, 120 40 S 180 30, 190 60" stroke="currentColor" strokeWidth="3" fill="none" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
 
@@ -408,13 +457,89 @@ export default function Page() {
               <div className="text-center text-xs text-foreground/40">{openMail.time}</div>
 
               <div className="flex gap-3">
-                <Button size="sm" variant="ghost" className="border-0 focus-visible:ring-0 text-foreground/70 hover:text-foreground hover:bg-foreground/5 rounded-full px-3" onClick={() => setOpenMail(null)}>Back</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="border-0 focus-visible:ring-0 text-foreground/70 hover:text-foreground hover:bg-foreground/5 rounded-full px-3"
+                  onClick={() => {
+                    // close via envelope
+                    setEnvelopeMode("close");
+                    setShowEnvelope(true);
+                    setTimeout(() => {
+                      setShowEnvelope(false);
+                      setOpenMail(null);
+                    }, 900);
+                  }}
+                >
+                  Back
+                </Button>
                 <Button size="sm" variant="destructive" className="border-0 focus-visible:ring-0 bg-destructive text-white hover:bg-destructive/90 shadow-md rounded-full px-4" onClick={() => { setMails((prev) => prev.filter((x) => x.id !== openMail.id)); setOpenMail(null); }}>Delete</Button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
+    </div>
+  );
+}
+
+// simple envelope animation component
+function EnvelopeAnimation({ mode }: { mode: "open" | "close" }) {
+  const isOpening = mode === "open";
+  return (
+    <div className="relative w-[320px] h-[220px]">
+      {/* envelope body */}
+      <div className="absolute inset-0 rounded-xl shadow-2xl"
+        style={{
+          background:
+            "linear-gradient(180deg,#f1e7d3 0%,#e8ddc4 100%)",
+        }}
+      />
+
+      {/* letter */}
+      <motion.div
+        initial={{ y: isOpening ? 60 : 0, opacity: 0.95 }}
+        animate={{ y: isOpening ? -40 : 60, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 26, duration: 0.9 }}
+        className="absolute left-4 right-4 top-6 h-[150px] rounded-lg shadow-lg ring-1 ring-black/5 bg-[#fffdfa]"
+        style={{
+          backgroundImage: "linear-gradient(transparent 23px, rgba(0,0,0,0.05) 24px)",
+          backgroundSize: "100% 24px",
+        }}
+      >
+        <div className="p-4 text-[16px] handwritten text-neutral-700">
+          dear sam —
+          <br />
+          opening your letter…
+        </div>
+      </motion.div>
+
+      {/* wax seal */}
+      <motion.div
+        initial={{ scale: isOpening ? 1 : 0, opacity: 1 }}
+        animate={{ scale: isOpening ? 0 : 1, opacity: isOpening ? 0 : 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        className="absolute left-1/2 -translate-x-1/2 top-[72px] w-10 h-10 rounded-full bg-red-600 shadow-md ring-2 ring-red-700/40"
+        style={{ boxShadow: "0 6px 10px rgba(0,0,0,0.25), inset 0 2px 0 rgba(255,255,255,0.3)" }}
+      />
+
+      {/* flap */}
+      <motion.div
+        initial={{ rotateX: isOpening ? 0 : 180, transformOrigin: "top" }}
+        animate={{ rotateX: isOpening ? 180 : 0 }}
+        transition={{ type: "spring", stiffness: 220, damping: 22 }}
+        className="absolute left-0 right-0 top-0 h-[110px] origin-top rounded-t-xl"
+        style={{
+          background:
+            "linear-gradient(180deg,#e5d8bb 0%,#dacba8 100%)",
+          clipPath: "polygon(0% 0%, 50% 0%, 100% 0%, 50% 100%)",
+          boxShadow: "inset 0 -8px 14px rgba(0,0,0,0.12)",
+        }}
+      />
+
+      {/* decorative seams */}
+      <div className="absolute inset-0 rounded-xl ring-1 ring-black/10" />
+      <div className="absolute inset-0 rounded-xl" style={{ boxShadow: "inset 0 6px 12px rgba(0,0,0,0.08)" }} />
     </div>
   );
 }

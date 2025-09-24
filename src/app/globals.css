@@ -1,5 +1,8 @@
+/* Updated: 2025-09-24T11:35:20.657Z */
+/* Updated: 2025-09-24T11:35:10.003Z */
 /* Updated: 2025-09-21T17:21:22.461Z */
 /* Updated: 2025-09-21T16:41:41.867Z */
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -120,6 +123,14 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  .handwritten {
+    font-family: "Caveat", var(--font-sans);
+    letter-spacing: 0.01em;
+    font-synthesis-weight: none;
+    font-kerning: normal;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
